@@ -32,6 +32,7 @@ export const Colors = {
     reading: { bg: '#FFF0E4', text: '#C05010' },
     music: { bg: '#FBEAF0', text: '#993556' },
     culture: { bg: '#E6F1FB', text: '#185FA5' },
+    online: { bg: '#EDE8FE', text: '#5B21B6' },
   },
   dark: {
     // Brand
@@ -66,5 +67,6 @@ export const Colors = {
     reading: { bg: '#3D2208', text: '#F0997B' },
     music: { bg: '#4B1528', text: '#ED93B1' },
     culture: { bg: '#042C53', text: '#85B7EB' },
+    online: { bg: '#2D1F5E', text: '#C4B5FD' },
   },
 };

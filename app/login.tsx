@@ -2,7 +2,7 @@ import { Colors } from '@/constants/colors';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,17 +19,10 @@ import {
   View,
 } from 'react-native';
 
-type Sheet = 'signin' | 'register' | null;
 
-function LogoPlaceholder({ colors }: { colors: typeof Colors.light }) {
-  return (
-    <View style={[styles.logoWrap, { backgroundColor: colors.primaryLight }]}>
-      <View style={[styles.logoInner, { backgroundColor: colors.primary }]}>
-        <Ionicons name="location" size={34} color="#fff" />
-      </View>
-    </View>
-  );
-}
+const LOGO = require('../assets/images/InTownlogo.png');
+
+type Sheet = 'signin' | 'register' | null;
 
 function FormSheet({
   sheet,
@@ -74,7 +67,11 @@ function FormSheet({
     setLoading(false);
     if (result.success) {
       handleClose();
-      router.replace('/');
+      if (result.isNew && result.role === 'user') {
+        router.replace('/tutorial');
+      } else {
+        router.replace('/(tabs)');
+      }
     } else {
       setError(result.error ?? 'Something went wrong. Try again.');
     }
@@ -176,23 +173,21 @@ function FormSheet({
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const { user } = useAuth();
+  const { user, authLoading } = useAuth();
   const [sheet, setSheet] = useState<Sheet>(null);
 
+  if (authLoading) return <View style={[styles.safe, { backgroundColor: colors.background }]} />;
   if (user) return <Redirect href="/(tabs)" />;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      {/* Hero */}
       <View style={styles.hero}>
-        <LogoPlaceholder colors={colors} />
-        <Text style={[styles.appName, { color: colors.text }]}>LocalIn</Text>
+        <Image source={LOGO} style={styles.logo} contentFit="contain" />
         <Text style={[styles.tagline, { color: colors.textSecondary }]}>
           Connect with people in your city
         </Text>
       </View>
 
-      {/* CTA buttons */}
       <View style={styles.actions}>
         <TouchableOpacity
           style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
@@ -211,7 +206,6 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Slide-up modal */}
       <Modal
         visible={sheet !== null}
         transparent
@@ -235,27 +229,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  logoWrap: {
-    width: 100,
+  logo: {
+    width: 220,
     height: 100,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 8,
   },
-  logoInner: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
-  appName: {
-    fontSize: 36,
-    fontWeight: '800',
-    letterSpacing: -1,
-  },
   tagline: {
     fontSize: Theme.fontSize.base,
     textAlign: 'center',
@@ -290,7 +269,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Sheet
   sheetKav: { flex: 1 },
   sheetOverlay: { flex: 1 },
   sheet: {

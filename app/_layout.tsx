@@ -1,23 +1,32 @@
-import { AuthProvider } from '@/context/auth';
+import { AuthProvider, useAuth } from '@/context/auth';
 import { ChatProvider } from '@/context/chat';
 import { EventsProvider } from '@/context/events';
-import { LocationProvider } from '@/context/location';
+import { LocationProvider, useLocation } from '@/context/location';
 import { ThemeProvider } from '@/context/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { initDatabase } from '@/lib/database';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { SQLiteProvider } from 'expo-sqlite';
 import { useEffect } from 'react';
+
+function CitySync() {
+  const { user } = useAuth();
+  const { setCity } = useLocation();
+  useEffect(() => {
+    if (user?.city) setCity(user.city);
+  }, [user?.city]);
+  return null;
+}
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
-  const [loaded] = useFonts({
-    // Uses system fonts for now - swap with custom fonts here if desired
-  });
+  const [loaded] = useFonts({});
 
   useEffect(() => {
     if (loaded) {
@@ -30,11 +39,15 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
     <LocationProvider>
+    <SQLiteProvider databaseName="intown_v3.db" onInit={initDatabase}>
     <AuthProvider>
       <EventsProvider>
       <ChatProvider>
+        <CitySync />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: false }} />
+          <Stack.Screen name="tutorial" options={{ headerShown: false, gestureEnabled: false }} />
+          <Stack.Screen name="city-onboarding" options={{ headerShown: false, gestureEnabled: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="create-event"
@@ -72,6 +85,7 @@ export default function RootLayout() {
       </ChatProvider>
       </EventsProvider>
     </AuthProvider>
+    </SQLiteProvider>
     </LocationProvider>
     </ThemeProvider>
   );

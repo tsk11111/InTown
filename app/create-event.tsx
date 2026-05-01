@@ -14,6 +14,7 @@ import {
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { isConfigured, uploadPhoto } from '@/lib/supabase';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -129,7 +130,6 @@ function CityPickerModal({
         >
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
 
-          {/* Header */}
           <View style={styles.pickerHeader}>
             {step === 'city' ? (
               <TouchableOpacity
@@ -151,7 +151,6 @@ function CityPickerModal({
             </TouchableOpacity>
           </View>
 
-          {/* Search */}
           <View style={[styles.searchBox, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
             <Ionicons name="search-outline" size={15} color={colors.textTertiary} />
             <TextInput
@@ -240,7 +239,6 @@ export default function CreateEventScreen() {
         setTitle(event.title);
         setVenue(event.venue);
         setCity(event.city ?? '');
-        // neighbourhood is the location string minus the city suffix
         const loc = event.location ?? '';
         const cityIndex = loc.lastIndexOf(`, ${event.city}`);
         setNeighbourhood(cityIndex !== -1 ? loc.slice(0, cityIndex) : loc);
@@ -290,7 +288,21 @@ export default function CreateEventScreen() {
       return;
     }
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 400));
+
+    let resolvedPhotos = photos;
+    if (isConfigured()) {
+      resolvedPhotos = await Promise.all(
+        photos.map(async (uri) => {
+          if (uri.startsWith('http')) return uri;
+          try {
+            return await uploadPhoto(uri);
+          } catch (err) {
+            console.warn('Photo upload failed, falling back to local URI:', err);
+            return uri;
+          }
+        })
+      );
+    }
 
     const location = neighbourhood.trim() ? `${neighbourhood.trim()}, ${city}` : city;
 
@@ -308,19 +320,20 @@ export default function CreateEventScreen() {
       priceDisplay: getPriceDisplay(price),
       spots: parseInt(spots, 10) || 20,
       status,
-      photos,
+      photos: resolvedPhotos,
       emoji: CATEGORY_EMOJI[category],
     };
 
     if (isEditing && id) {
       updateEvent(id, payload);
-      setSaving(false);
-      router.back();
     } else {
       const newId = addEvent(payload);
       setSaving(false);
       router.replace({ pathname: '/event/[id]', params: { id: newId } });
+      return;
     }
+    setSaving(false);
+    router.back();
   };
 
   const inputStyle = [
@@ -372,7 +385,6 @@ export default function CreateEventScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Photos */}
           <SectionLabel text="PHOTOS" colors={colors} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
             {photos.map((uri, index) => (
@@ -395,7 +407,6 @@ export default function CreateEventScreen() {
             )}
           </ScrollView>
 
-          {/* Basic info */}
           <SectionLabel text="EVENT DETAILS" colors={colors} />
 
           <Field label="Event name *" colors={colors}>
@@ -418,7 +429,6 @@ export default function CreateEventScreen() {
             />
           </Field>
 
-          {/* City picker */}
           <Field label="City *" colors={colors}>
             <TouchableOpacity
               style={[
@@ -487,7 +497,6 @@ export default function CreateEventScreen() {
             />
           </Field>
 
-          {/* Category */}
           <SectionLabel text="CATEGORY" colors={colors} />
           <View style={styles.chips}>
             {CATEGORIES.map((cat) => {
@@ -523,7 +532,6 @@ export default function CreateEventScreen() {
             })}
           </View>
 
-          {/* Price */}
           <SectionLabel text="PRICE PER PERSON" colors={colors} />
           <View style={styles.priceRow}>
             {PRICE_OPTIONS.map(({ key, label }) => {
@@ -549,7 +557,6 @@ export default function CreateEventScreen() {
             })}
           </View>
 
-          {/* Spots */}
           <SectionLabel text="CAPACITY" colors={colors} />
           <Field label="Available spots" colors={colors}>
             <TextInput
@@ -690,7 +697,6 @@ const styles = StyleSheet.create({
   saveBtnDisabled: { opacity: 0.65 },
   saveBtnText: { color: '#fff', fontSize: Theme.fontSize.base, fontWeight: '600' },
 
-  // City picker modal
   modalRoot: { flex: 1 },
   pickerSheet: {
     borderTopLeftRadius: 24,

@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 
 type FilterCategory = 'All' | EventCategory;
-const FILTER_CATEGORIES: FilterCategory[] = ['All', ...CATEGORIES];
+const FILTER_CATEGORIES: FilterCategory[] = ['All', ...CATEGORIES.filter((c) => c !== 'Online')];
 
 function CategoryChip({
   label,
@@ -129,7 +129,6 @@ export default function EventsNearbyScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: colors.backgroundTertiary }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={22} color={colors.text} />
@@ -142,7 +141,6 @@ export default function EventsNearbyScreen() {
         </View>
       </View>
 
-      {/* Category chips */}
       <View style={[styles.categoryBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
           {FILTER_CATEGORIES.map((cat) => (

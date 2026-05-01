@@ -2,7 +2,7 @@ import { Colors } from '@/constants/colors';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useChat } from '@/context/chat';
-import { useEvents } from '@/context/events';
+import { isEventPast, useEvents } from '@/context/events';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -65,13 +65,15 @@ export default function ChatScreen() {
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, joinedEventIds } = useAuth();
   const { getEvent } = useEvents();
   const { getMessages, sendMessage } = useChat();
   const [text, setText] = useState('');
   const listRef = useRef<FlatList>(null);
 
   const event = getEvent(id);
+  const isPast = event ? isEventPast(event.date, event.time) : false;
+  const isJoined = event ? joinedEventIds.includes(event.id) : false;
   const messages = getMessages(id);
 
   useEffect(() => {
@@ -88,9 +90,39 @@ export default function ChatScreen() {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
   };
 
+  if (!isJoined) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border, paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+              {event?.title ?? 'Event chat'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.guardWrap}>
+          <Ionicons name="lock-closed-outline" size={44} color={colors.textTertiary} />
+          <Text style={[styles.guardTitle, { color: colors.text }]}>Join to access chat</Text>
+          <Text style={[styles.guardSub, { color: colors.textSecondary }]}>
+            You need to join this event before you can view or send messages.
+          </Text>
+          <TouchableOpacity
+            style={[styles.guardBtn, { backgroundColor: colors.primary }]}
+            onPress={() => router.replace({ pathname: '/event/[id]', params: { id } })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.guardBtnText}>View event</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View
         style={[
           styles.header,
@@ -119,7 +151,6 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        {/* Messages */}
         <FlatList
           ref={listRef}
           data={messages}
@@ -152,43 +183,49 @@ export default function ChatScreen() {
           }}
         />
 
-        {/* Input bar */}
-        <View
-          style={[
-            styles.inputBar,
-            {
-              backgroundColor: colors.background,
-              borderTopColor: colors.border,
-              paddingBottom: insets.bottom + 8,
-            },
-          ]}
-        >
-          <TextInput
+        {isPast ? (
+          <View style={[styles.endedBar, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: insets.bottom + 8 }]}>
+            <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
+            <Text style={[styles.endedText, { color: colors.textTertiary }]}>Chat closed - this event has ended</Text>
+          </View>
+        ) : (
+          <View
             style={[
-              styles.input,
-              { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text },
+              styles.inputBar,
+              {
+                backgroundColor: colors.background,
+                borderTopColor: colors.border,
+                paddingBottom: insets.bottom + 8,
+              },
             ]}
-            placeholder="Message…"
-            placeholderTextColor={colors.textTertiary}
-            value={text}
-            onChangeText={setText}
-            returnKeyType="send"
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-            multiline
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendBtn,
-              { backgroundColor: text.trim() ? colors.primary : colors.backgroundSecondary },
-            ]}
-            onPress={handleSend}
-            activeOpacity={0.8}
-            disabled={!text.trim()}
           >
-            <Ionicons name="send" size={18} color={text.trim() ? '#fff' : colors.textTertiary} />
-          </TouchableOpacity>
-        </View>
+            <TextInput
+              style={[
+                styles.input,
+                { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text },
+              ]}
+              placeholder="Message…"
+              placeholderTextColor={colors.textTertiary}
+              value={text}
+              onChangeText={setText}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+              multiline
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendBtn,
+                { backgroundColor: text.trim() ? colors.primary : colors.backgroundSecondary },
+              ]}
+              onPress={handleSend}
+              activeOpacity={0.8}
+              disabled={!text.trim()}
+            >
+              <Ionicons name="send" size={18} color={text.trim() ? '#fff' : colors.textTertiary} />
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </View>
   );
@@ -249,4 +286,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  endedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: Theme.spacing.md,
+    paddingTop: Theme.spacing.sm,
+    borderTopWidth: 0.5,
+  },
+  endedText: { fontSize: Theme.fontSize.sm },
+
+  guardWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Theme.spacing.xl, gap: 12 },
+  guardTitle: { fontSize: Theme.fontSize.xl, fontWeight: '700', textAlign: 'center' },
+  guardSub: { fontSize: Theme.fontSize.base, textAlign: 'center', lineHeight: 22, maxWidth: 280 },
+  guardBtn: {
+    marginTop: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: Theme.radius.lg,
+  },
+  guardBtnText: { color: '#fff', fontSize: Theme.fontSize.base, fontWeight: '600' },
 });

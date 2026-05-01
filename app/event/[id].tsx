@@ -1,13 +1,14 @@
 import { Colors } from '@/constants/colors';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { CATEGORY_EMOJI, useEvents, type OrganizerEvent } from '@/context/events';
+import { CATEGORY_EMOJI, isEventPast, useEvents, type OrganizerEvent } from '@/context/events';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -76,6 +77,7 @@ export default function EventDetailScreen() {
 
   const event = getEvent(id);
   const isJoined = event ? joinedEventIds.includes(event.id) : false;
+  const isPast = event ? isEventPast(event.date, event.time) : false;
 
   if (!event) {
     return (
@@ -93,15 +95,12 @@ export default function EventDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Scrollable content */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
       >
-        {/* Hero */}
         <View>
           <EventHero event={event} colors={colors} />
-          {/* Back button overlaid on hero */}
           <TouchableOpacity
             style={[styles.backBtn, { top: insets.top + 12, backgroundColor: 'rgba(0,0,0,0.35)' }]}
             onPress={() => router.back()}
@@ -112,30 +111,34 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={styles.body}>
-          {/* Category badge + Join chat */}
           <View style={styles.topRow}>
             <View style={[styles.badge, { backgroundColor: catColor?.bg ?? colors.primaryLight }]}>
               <Text style={[styles.badgeText, { color: catColor?.text ?? colors.primary }]}>
                 {event.category}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.chatBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
-              onPress={() => router.push({ pathname: '/chat/[id]', params: { id: event.id } })}
-              activeOpacity={0.75}
-            >
-              <Ionicons name="chatbubble-outline" size={13} color={colors.primary} />
-              <Text style={[styles.chatBtnText, { color: colors.primary }]}>Join chat</Text>
-            </TouchableOpacity>
+            {!isPast && isJoined && (
+              <TouchableOpacity
+                style={[styles.chatBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+                onPress={() => router.push({ pathname: '/chat/[id]', params: { id: event.id } })}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="chatbubble-outline" size={13} color={colors.primary} />
+                <Text style={[styles.chatBtnText, { color: colors.primary }]}>Join chat</Text>
+              </TouchableOpacity>
+            )}
+            {!isPast && !isJoined && (
+              <View style={[styles.chatBtn, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
+                <Ionicons name="lock-closed-outline" size={13} color={colors.textTertiary} />
+                <Text style={[styles.chatBtnText, { color: colors.textTertiary }]}>Join to chat</Text>
+              </View>
+            )}
           </View>
 
-          {/* Title */}
           <Text style={[styles.title, { color: colors.text }]}>{event.title}</Text>
 
-          {/* Divider */}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          {/* Info rows */}
           <View style={styles.infoBlock}>
             <InfoRow
               icon="storefront-outline"
@@ -175,10 +178,8 @@ export default function EventDetailScreen() {
             />
           </View>
 
-          {/* Divider */}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          {/* Description */}
           <View style={styles.descBlock}>
             <Text style={[styles.descHeading, { color: colors.text }]}>About this event</Text>
             <Text style={[styles.descText, { color: colors.textSecondary }]}>
@@ -188,7 +189,6 @@ export default function EventDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Sticky Join button */}
       <View
         style={[
           styles.joinBar,
@@ -199,26 +199,53 @@ export default function EventDetailScreen() {
           },
         ]}
       >
-        <View style={styles.joinBarInner}>
-          <View>
-            <Text style={[styles.joinPrice, { color: colors.text }]}>{event.priceDisplay}</Text>
-            <Text style={[styles.joinPriceSub, { color: colors.textTertiary }]}>per person</Text>
+        {isPast ? (
+          <View style={[styles.endedBar, { backgroundColor: colors.backgroundSecondary, borderRadius: Theme.radius.lg }]}>
+            <Ionicons name="time-outline" size={16} color={colors.textTertiary} />
+            <Text style={[styles.endedText, { color: colors.textSecondary }]}>This event has ended</Text>
           </View>
-          <TouchableOpacity
-            style={[
-              styles.joinBtn,
-              { backgroundColor: isJoined ? colors.backgroundSecondary : colors.primary,
-                borderWidth: isJoined ? 0.5 : 0,
-                borderColor: colors.border },
-            ]}
-            activeOpacity={0.85}
-            onPress={() => isJoined ? leaveEvent(event.id) : joinEvent(event.id)}
-          >
-            <Text style={[styles.joinBtnText, { color: isJoined ? colors.textSecondary : '#fff' }]}>
-              {isJoined ? 'Leave event' : 'Join event'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        ) : (
+          <View style={styles.joinBarInner}>
+            {isJoined ? (
+              <View style={styles.joinedBadge}>
+                <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+                <Text style={styles.joinedBadgeText}>Joined</Text>
+              </View>
+            ) : (
+              <View>
+                <Text style={[styles.joinPrice, { color: colors.text }]}>{event.priceDisplay}</Text>
+                <Text style={[styles.joinPriceSub, { color: colors.textTertiary }]}>per person</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.joinBtn,
+                { backgroundColor: isJoined ? colors.backgroundSecondary : colors.primary,
+                  borderWidth: isJoined ? 0.5 : 0,
+                  borderColor: colors.border },
+              ]}
+              activeOpacity={0.85}
+              onPress={() => {
+                if (isJoined) {
+                  Alert.alert(
+                    'Leave event?',
+                    `You'll be removed from "${event.title}" and lose access to the group chat.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Leave', style: 'destructive', onPress: () => leaveEvent(event.id) },
+                    ]
+                  );
+                } else {
+                  joinEvent(event.id);
+                }
+              }}
+            >
+              <Text style={[styles.joinBtnText, { color: isJoined ? colors.textSecondary : '#fff' }]}>
+                {isJoined ? 'Leave event' : 'Join event'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -318,6 +345,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  joinedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  joinedBadgeText: { fontSize: Theme.fontSize.lg, fontWeight: '700', color: '#16A34A' },
   joinPrice: { fontSize: Theme.fontSize.lg, fontWeight: '700' },
   joinPriceSub: { fontSize: Theme.fontSize.xs, marginTop: 1 },
   joinBtn: {
@@ -326,4 +355,6 @@ const styles = StyleSheet.create({
     borderRadius: Theme.radius.lg,
   },
   joinBtnText: { color: '#fff', fontSize: Theme.fontSize.base, fontWeight: '600' },
+  endedBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
+  endedText: { fontSize: Theme.fontSize.sm, fontWeight: '500' },
 });

@@ -118,7 +118,6 @@ export default function ManageScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors.backgroundTertiary }]}>
-      {/* Header */}
       <View
         style={[
           styles.header,
@@ -141,7 +140,6 @@ export default function ManageScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Stats */}
       <View
         style={[
           styles.statsRow,
@@ -166,7 +164,6 @@ export default function ManageScreen() {
         </View>
       </View>
 
-      {/* List */}
       <FlatList
         data={myEvents}
         keyExtractor={(item) => item.id}

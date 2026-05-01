@@ -1,37 +1,39 @@
+import { CITIES } from '@/constants/cities';
 import { Colors } from '@/constants/colors';
 import { Theme } from '@/constants/theme';
-import { CITIES, flag } from '@/constants/cities';
 import { useAuth } from '@/context/auth';
-import { useLocation } from '@/context/location';
 import {
   CATEGORIES,
   CATEGORY_EMOJI,
+  DEMO_NOW,
   PRICE_OPTIONS,
   useEvents,
   type EventCategory,
   type OrganizerEvent,
   type PriceKey,
 } from '@/context/events';
+import { useLocation } from '@/context/location';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   FlatList,
   Modal,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const SHEET_SCROLL_HEIGHT = Dimensions.get('window').height * 0.48;
+const SCREEN_H = Dimensions.get('window').height;
 
 type FilterCategory = 'All' | EventCategory;
 const FILTER_CATEGORIES: FilterCategory[] = ['All', ...CATEGORIES];
@@ -43,10 +45,6 @@ const DATE_OPTIONS: { key: DateFilter; label: string }[] = [
   { key: 'weekend', label: 'Weekend' },
 ];
 
-// All countries derived from CITIES, deduped and sorted
-const ALL_COUNTRIES = Array.from(
-  new Map(CITIES.map((c) => [c.country, { country: c.country, code: c.code }])).values()
-).sort((a, b) => a.country.localeCompare(b.country));
 
 function CategoryChip({
   label,
@@ -78,7 +76,7 @@ function CategoryChip({
   );
 }
 
-export function EventCard({ event, colors }: { event: OrganizerEvent; colors: typeof Colors.light }) {
+export function EventCard({ event, colors, isJoined = false }: { event: OrganizerEvent; colors: typeof Colors.light; isJoined?: boolean }) {
   const categoryColor = colors[event.category.toLowerCase() as keyof typeof colors] as
     | { bg: string; text: string }
     | undefined;
@@ -98,7 +96,7 @@ export function EventCard({ event, colors }: { event: OrganizerEvent; colors: ty
         </View>
       )}
       <View style={styles.cardBody}>
-        <View style={[styles.badge, { backgroundColor: categoryColor?.bg ?? colors.primaryLight }]}>
+        <View style={[styles.badge, { backgroundColor: categoryColor?.bg ?? colors.primaryLight, marginBottom: 6 }]}>
           <Text style={[styles.badgeText, { color: categoryColor?.text ?? colors.primary }]}>
             {event.category}
           </Text>
@@ -116,11 +114,17 @@ export function EventCard({ event, colors }: { event: OrganizerEvent; colors: ty
             <Text style={[styles.cardSpots, { color: colors.textTertiary }]}>{event.spots} spots available</Text>
           </View>
           <TouchableOpacity
-            style={[styles.joinBtn, { backgroundColor: colors.primary }]}
+            style={[styles.joinBtn, {
+              backgroundColor: isJoined ? '#DCFCE7' : colors.primary,
+              borderWidth: isJoined ? 1 : 0,
+              borderColor: '#86EFAC',
+            }]}
             activeOpacity={0.85}
             onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
           >
-            <Text style={styles.joinBtnText}>Join</Text>
+            <Text style={[styles.joinBtnText, { color: isJoined ? '#16A34A' : '#fff' }]}>
+              {isJoined ? 'Joined' : 'Join'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -152,63 +156,92 @@ function FilterSheet({
   onReset: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [countrySearch, setCountrySearch] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
-  const [showAllCountries, setShowAllCountries] = useState(false);
+  const [citySearch, setCitySearch] = useState('');
 
-  const toggleCity = (c: string) =>
-    setFilterCities(filterCities.includes(c) ? filterCities.filter((x) => x !== c) : [...filterCities, c]);
+  const translateY = useRef(new Animated.Value(SCREEN_H)).current;
+  const lastSnapY = useRef(0);
+
+  useEffect(() => {
+    if (visible) {
+      translateY.setValue(SCREEN_H);
+      lastSnapY.current = 0;
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 22,
+        stiffness: 220,
+      }).start();
+    }
+  }, [visible]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 5,
+      onPanResponderMove: (_, gs) => {
+        const next = Math.max(0, lastSnapY.current + gs.dy);
+        translateY.setValue(next);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const finalY = lastSnapY.current + gs.dy;
+        if (finalY > 80 || gs.vy > 0.8) {
+          Animated.timing(translateY, { toValue: SCREEN_H, duration: 220, useNativeDriver: true })
+            .start(() => { lastSnapY.current = 0; onClose(); });
+        } else {
+          lastSnapY.current = 0;
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 220 }).start();
+        }
+      },
+    })
+  ).current;
+
+  const addCity = (cityName: string) => {
+    if (!filterCities.includes(cityName)) setFilterCities([...filterCities, cityName]);
+    setCitySearch('');
+  };
+
+  const removeCity = (cityName: string) =>
+    setFilterCities(filterCities.filter((c) => c !== cityName));
 
   const togglePrice = (p: PriceKey) =>
     setFilterPrices(filterPrices.includes(p) ? filterPrices.filter((x) => x !== p) : [...filterPrices, p]);
 
-  const filteredCountries = useMemo(
-    () =>
-      countrySearch.trim() === ''
-        ? ALL_COUNTRIES
-        : ALL_COUNTRIES.filter((c) =>
-            c.country.toLowerCase().includes(countrySearch.toLowerCase())
-          ),
-    [countrySearch]
-  );
-
-  const citiesForCountry = useMemo(
-    () =>
-      selectedCountry
-        ? CITIES.filter((c) => c.country === selectedCountry).map((c) => c.city).sort()
-        : [],
-    [selectedCountry]
-  );
+  const cityResults = useMemo(() => {
+    const q = citySearch.trim().toLowerCase();
+    if (!q) return [];
+    return CITIES
+      .filter((c) => c.city.toLowerCase().includes(q) && !filterCities.includes(c.city))
+      .slice(0, 1);
+  }, [citySearch, filterCities]);
 
   const handleReset = () => {
     onReset();
-    setSelectedCountry(null);
-    setCountrySearch('');
+    setCitySearch('');
   };
 
   const handleClose = () => {
-    setSelectedCountry(null);
-    setCountrySearch('');
-    onClose();
+    Animated.timing(translateY, { toValue: SCREEN_H, duration: 250, useNativeDriver: true })
+      .start(() => {
+        lastSnapY.current = 0;
+        setCitySearch('');
+        onClose();
+      });
   };
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="none" onRequestClose={handleClose}>
       <View style={styles.modalRoot}>
-        {/* Tap outside to close - flex:1 pushes sheet to bottom */}
-        <TouchableWithoutFeedback onPress={handleClose}>
-          <View style={{ flex: 1 }} />
-        </TouchableWithoutFeedback>
-
-        {/* Outer wrapper: solid background from rounded top all the way to screen edge */}
-        <View style={[styles.sheetOuter, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16 }]}>
-          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-
-          <View style={styles.sheetHeader}>
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>Filters</Text>
-            <TouchableOpacity onPress={handleReset} activeOpacity={0.7}>
-              <Text style={[styles.sheetReset, { color: colors.primary }]}>Reset all</Text>
-            </TouchableOpacity>
+        <Animated.View style={[styles.sheetOuter, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom + 16, transform: [{ translateY }] }]}>
+          <View {...panResponder.panHandlers}>
+            <View style={styles.handleArea}>
+              <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+            </View>
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>Filters</Text>
+              <TouchableOpacity onPress={handleReset} activeOpacity={0.7}>
+                <Text style={[styles.sheetReset, { color: colors.primary }]}>Reset all</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
@@ -218,109 +251,56 @@ function FilterSheet({
             keyboardShouldPersistTaps="handled"
           >
 
-            {/* ── CITY ─────────────────────────────── */}
             <View style={styles.filterSection}>
               <Text style={[styles.filterSectionTitle, { color: colors.textTertiary }]}>CITY</Text>
 
-              {selectedCountry ? (
-                /* City list for selected country */
-                <View style={styles.cityPanel}>
-                  <TouchableOpacity
-                    style={[styles.backRow, { borderBottomColor: colors.border }]}
-                    onPress={() => setSelectedCountry(null)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="arrow-back" size={16} color={colors.primary} />
-                    <Text style={[styles.backRowText, { color: colors.primary }]}>
-                      {flag(ALL_COUNTRIES.find((c) => c.country === selectedCountry)?.code ?? '')} {selectedCountry}
-                    </Text>
-                  </TouchableOpacity>
-                  {citiesForCountry.map((cityName) => {
-                    const active = filterCities.includes(cityName);
-                    return (
-                      <TouchableOpacity
-                        key={cityName}
-                        onPress={() => toggleCity(cityName)}
-                        style={[styles.cityRow, { borderBottomColor: colors.border }]}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.cityRowName, { color: colors.text }]}>{cityName}</Text>
-                        {active && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : (
-                /* Country list */
-                <View style={styles.countryPanel}>
-                  <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Ionicons name="search-outline" size={15} color={colors.textTertiary} />
-                    <TextInput
-                      style={[styles.searchInput, { color: colors.text }]}
-                      placeholder="Search country…"
-                      placeholderTextColor={colors.textTertiary}
-                      value={countrySearch}
-                      onChangeText={setCountrySearch}
-                      autoCorrect={false}
-                    />
-                    {countrySearch.length > 0 && (
-                      <TouchableOpacity onPress={() => setCountrySearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="close-circle" size={15} color={colors.textTertiary} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  {(countrySearch.trim() || showAllCountries
-                    ? filteredCountries
-                    : filteredCountries.slice(0, 5)
-                  ).map(({ country, code }) => {
-                    const cityCount = CITIES.filter((c) => c.country === country).length;
-                    const selectedCount = filterCities.filter((city) =>
-                      CITIES.some((c) => c.country === country && c.city === city)
-                    ).length;
-                    return (
-                      <TouchableOpacity
-                        key={country}
-                        style={[styles.countryRow, { borderBottomColor: colors.border }]}
-                        onPress={() => setSelectedCountry(country)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.countryFlag}>{flag(code)}</Text>
-                        <Text style={[styles.countryName, { color: colors.text }]}>{country}</Text>
-                        {selectedCount > 0 && (
-                          <View style={[styles.countryBadge, { backgroundColor: colors.primary }]}>
-                            <Text style={styles.countryBadgeText}>{selectedCount}</Text>
-                          </View>
-                        )}
-                        <Text style={[styles.countryCityCount, { color: colors.textTertiary }]}>
-                          {cityCount} {cityCount === 1 ? 'city' : 'cities'}
-                        </Text>
-                        <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
-                      </TouchableOpacity>
-                    );
-                  })}
-                  {!countrySearch.trim() && filteredCountries.length > 5 && (
+              {filterCities.length > 0 && (
+                <View style={styles.selectedCityChips}>
+                  {filterCities.map((c) => (
                     <TouchableOpacity
-                      onPress={() => setShowAllCountries((v) => !v)}
-                      style={styles.showMoreBtn}
+                      key={c}
+                      style={[styles.cityChip, { backgroundColor: colors.primaryLight, borderColor: colors.primaryMid }]}
+                      onPress={() => removeCity(c)}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.showMoreText, { color: colors.primary }]}>
-                        {showAllCountries
-                          ? 'Show less'
-                          : `Show all ${filteredCountries.length} countries`}
-                      </Text>
-                      <Ionicons
-                        name={showAllCountries ? 'chevron-up' : 'chevron-down'}
-                        size={14}
-                        color={colors.primary}
-                      />
+                      <Text style={[styles.cityChipText, { color: colors.primary }]}>{c}</Text>
+                      <Ionicons name="close" size={13} color={colors.primary} />
                     </TouchableOpacity>
-                  )}
+                  ))}
                 </View>
               )}
+
+              <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Ionicons name="search-outline" size={15} color={colors.textTertiary} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.text }]}
+                  placeholder="Search city…"
+                  placeholderTextColor={colors.textTertiary}
+                  value={citySearch}
+                  onChangeText={setCitySearch}
+                  autoCorrect={false}
+                />
+                {citySearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setCitySearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close-circle" size={15} color={colors.textTertiary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {cityResults.map(({ city: cityName }) => (
+                <TouchableOpacity
+                  key={cityName}
+                  style={[styles.cityRow, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  onPress={() => addCity(cityName)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="location-outline" size={15} color={colors.textTertiary} />
+                  <Text style={[styles.cityRowName, { color: colors.text }]}>{cityName}</Text>
+                  <Ionicons name="add" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              ))}
             </View>
 
-            {/* ── PRICE ────────────────────────────── */}
             <View style={styles.filterSection}>
               <Text style={[styles.filterSectionTitle, { color: colors.textTertiary }]}>PRICE</Text>
               <View style={styles.chipWrap}>
@@ -349,7 +329,6 @@ function FilterSheet({
               </View>
             </View>
 
-            {/* ── DATE ─────────────────────────────── */}
             <View style={styles.filterSection}>
               <Text style={[styles.filterSectionTitle, { color: colors.textTertiary }]}>DATE</Text>
               <View style={styles.chipWrap}>
@@ -377,7 +356,17 @@ function FilterSheet({
               </View>
             </View>
           </ScrollView>
-        </View>
+
+          <View style={[styles.sheetFooter, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.primary }]}
+              onPress={handleClose}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.closeBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -389,21 +378,33 @@ const MONTH_ABBREVS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oc
 function matchesDateFilter(date: string, filter: DateFilter): boolean {
   if (filter === 'any') return true;
   if (date.startsWith('Every') || date.startsWith('Fiecare')) return true;
-  const now = new Date();
+  const now = DEMO_NOW;
   const day = date.split(' ')[0];
   if (filter === 'today') {
     const monthAbbr = MONTH_ABBREVS[now.getMonth()];
     return date.includes(String(now.getDate())) && date.toLowerCase().includes(monthAbbr.toLowerCase());
   }
   if (filter === 'weekend') return WEEKEND_DAYS.includes(day);
-  if (filter === 'week') return true;
+  if (filter === 'week') {
+    const weekEnd = new Date(now);
+    weekEnd.setDate(now.getDate() + 7);
+    for (let i = 0; i < MONTH_ABBREVS.length; i++) {
+      const abbr = MONTH_ABBREVS[i];
+      if (!date.toLowerCase().includes(abbr.toLowerCase())) continue;
+      const match = date.match(/(\d+)\s+/);
+      if (!match) continue;
+      const d = new Date(now.getFullYear(), i, parseInt(match[1]));
+      return d >= now && d <= weekEnd;
+    }
+    return false;
+  }
   return true;
 }
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const { user } = useAuth();
+  const { user, joinedEventIds } = useAuth();
   const { city } = useLocation();
   const { events } = useEvents();
 
@@ -431,7 +432,7 @@ export default function HomeScreen() {
       ? activeEvents
       : activeEvents.filter((e) => e.category === activeCategory);
     if (filterCities.length > 0)
-      result = result.filter((e) => filterCities.includes(e.city));
+      result = result.filter((e) => e.category === 'Online' || filterCities.includes(e.city));
     if (filterPrices.length > 0)
       result = result.filter((e) => filterPrices.includes(e.price));
     result = result.filter((e) => matchesDateFilter(e.date, filterDate));
@@ -446,7 +447,6 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: colors.backgroundTertiary }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Events near you</Text>
@@ -492,7 +492,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Category chips */}
       <View style={[styles.categoryBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
           {FILTER_CATEGORIES.map((cat) => (
@@ -507,13 +506,12 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
-      {/* Events feed */}
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.feed}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => <EventCard event={item} colors={colors} />}
+        renderItem={({ item }) => <EventCard event={item} colors={colors} isJoined={joinedEventIds.includes(item.id)} />}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyEmoji}>🔍</Text>
@@ -622,7 +620,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 2,
     borderRadius: Theme.radius.full,
-    marginBottom: 6,
   },
   badgeText: { fontSize: Theme.fontSize.xs, fontWeight: '500' },
   cardTitle: { fontSize: Theme.fontSize.md, fontWeight: '500', marginBottom: 4 },
@@ -651,21 +648,14 @@ const styles = StyleSheet.create({
   },
   resetBtnText: { fontSize: Theme.fontSize.sm, fontWeight: '600' },
 
-  // Modal / sheet
   modalRoot: { flex: 1 },
   sheetOuter: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 12,
+    height: SCREEN_H,
     paddingHorizontal: Theme.spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 16,
   },
-  sheetScroll: { height: SHEET_SCROLL_HEIGHT },
-  sheetHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  handleArea: { paddingTop: 12, paddingBottom: 8, alignItems: 'center' },
+  sheetScroll: { flex: 1 },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2 },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -675,6 +665,17 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: Theme.fontSize.xl, fontWeight: '700' },
   sheetReset: { fontSize: Theme.fontSize.sm, fontWeight: '500' },
   sheetBody: { gap: Theme.spacing.lg, paddingBottom: 8 },
+  sheetFooter: {
+    paddingTop: Theme.spacing.md,
+    borderTopWidth: 0.5,
+  },
+  closeBtn: {
+    height: 50,
+    borderRadius: Theme.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtnText: { color: '#fff', fontSize: Theme.fontSize.base, fontWeight: '600' },
 
   filterSection: { gap: 10 },
   filterSectionTitle: {
@@ -695,8 +696,6 @@ const styles = StyleSheet.create({
   },
   filterChipText: { fontSize: Theme.fontSize.sm, fontWeight: '500' },
 
-  // Country → city flow
-  countryPanel: { gap: 0 },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -705,39 +704,34 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     paddingHorizontal: 12,
     height: 40,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   searchInput: { flex: 1, fontSize: Theme.fontSize.sm },
-  countryRow: {
+  selectedCityChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  cityChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-    borderBottomWidth: 0.5,
-    gap: 8,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Theme.radius.full,
+    borderWidth: 0.5,
   },
-  countryFlag: { fontSize: 20 },
-  countryName: { flex: 1, fontSize: Theme.fontSize.sm, fontWeight: '500' },
-  countryBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countryBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  countryCityCount: { fontSize: Theme.fontSize.xs },
-
-  cityPanel: { gap: 10 },
+  cityChipText: { fontSize: Theme.fontSize.xs, fontWeight: '600' },
   cityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: Theme.radius.md,
+    borderWidth: 0.5,
+    marginTop: 2,
   },
-  cityRowName: { fontSize: Theme.fontSize.base, fontWeight: '500' },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  backRowText: { fontSize: Theme.fontSize.sm, fontWeight: '600' },
-  showMoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 10 },
-  showMoreText: { fontSize: Theme.fontSize.sm, fontWeight: '500' },
+  cityRowName: { flex: 1, fontSize: Theme.fontSize.sm, fontWeight: '500' },
 });

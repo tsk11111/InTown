@@ -22,15 +22,6 @@ import {
   View,
 } from 'react-native';
 
-const INTEREST_OPTIONS = [
-  { label: 'Games', key: 'games' },
-  { label: 'Sports', key: 'sports' },
-  { label: 'Reading', key: 'reading' },
-  { label: 'Music', key: 'music' },
-  { label: 'Social', key: 'social' },
-  { label: 'Culture', key: 'culture' },
-];
-
 function SettingsGroup({ children }: { children: React.ReactNode }) {
   return <View style={styles.settingsGroup}>{children}</View>;
 }
@@ -87,10 +78,6 @@ export default function ProfileScreen() {
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const nameInputRef = useRef<TextInput>(null);
-  const [interests, setInterests] = useState<Set<string>>(
-    new Set(['games', 'sports', 'reading'])
-  );
-
   const initials = (user?.name ?? 'U')
     .split(' ')
     .map((w) => w[0])
@@ -101,18 +88,6 @@ export default function ProfileScreen() {
   const handleLogout = () => {
     logout();
     router.replace('/login');
-  };
-
-  const toggleInterest = (key: string) => {
-    setInterests((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
   };
 
   const pickPhoto = async () => {
@@ -143,13 +118,11 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: colors.backgroundTertiary }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity onPress={pickPhoto} activeOpacity={0.8} style={styles.avatarWrap}>
             {user?.photoUri ? (
@@ -175,14 +148,13 @@ export default function ProfileScreen() {
               {city} · since March 2025
             </Text>
           )}
-          {!isOrganizer && newInCity && (
-            <View style={[styles.newInCityBadge, { backgroundColor: '#E1F5EE' }]}>
+          {!isOrganizer && (
+            <View style={[styles.newInCityBadge, { backgroundColor: '#E1F5EE', opacity: newInCity ? 1 : 0 }]}>
               <Text style={[styles.newInCityText, { color: '#0F6E56' }]}>New in city</Text>
             </View>
           )}
         </View>
 
-        {/* Personal */}
         <Text style={[styles.groupLabel, { color: colors.textTertiary }]}>PERSONAL</Text>
         <SettingsGroup>
           <SettingsRow
@@ -193,7 +165,6 @@ export default function ProfileScreen() {
           />
         </SettingsGroup>
 
-        {/* New in city toggle */}
         <Text style={[styles.groupLabel, { color: colors.textTertiary }]}>STATUS</Text>
         <SettingsGroup>
           <SettingsRow
@@ -210,7 +181,6 @@ export default function ProfileScreen() {
           />
         </SettingsGroup>
 
-        {/* Location */}
         <Text style={[styles.groupLabel, { color: colors.textTertiary }]}>LOCATION</Text>
         <SettingsGroup>
           <SettingsRow
@@ -221,41 +191,6 @@ export default function ProfileScreen() {
           />
         </SettingsGroup>
 
-        {/* Interests */}
-        <Text style={[styles.groupLabel, { color: colors.textTertiary }]}>INTERESTS</Text>
-        <View style={[styles.interestsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.interestsGrid}>
-            {INTEREST_OPTIONS.map((opt) => {
-              const active = interests.has(opt.key);
-              const catColor = colors[opt.key as keyof typeof colors] as { bg: string; text: string };
-              return (
-                <TouchableOpacity
-                  key={opt.key}
-                  onPress={() => toggleInterest(opt.key)}
-                  style={[
-                    styles.interestChip,
-                    {
-                      backgroundColor: active ? catColor.bg : colors.backgroundSecondary,
-                      borderColor: active ? catColor.text + '40' : colors.border,
-                    },
-                  ]}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.interestChipText,
-                      { color: active ? catColor.text : colors.textSecondary },
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Appearance */}
         <Text style={[styles.groupLabel, { color: colors.textTertiary }]}>APPEARANCE</Text>
         <View style={[styles.themeCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.themeLabel, { color: colors.text }]}>Theme</Text>
@@ -297,7 +232,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Account */}
         <Text style={[styles.groupLabel, { color: colors.textTertiary }]}>ACCOUNT</Text>
         <SettingsGroup>
           <SettingsRow
@@ -321,7 +255,6 @@ export default function ProfileScreen() {
 
       </ScrollView>
 
-      {/* Name change modal */}
       <Modal
         visible={nameModalVisible}
         transparent
@@ -438,21 +371,6 @@ const styles = StyleSheet.create({
   },
   settingsLabel: { fontSize: Theme.fontSize.md },
   settingsValue: { fontSize: Theme.fontSize.sm },
-
-  interestsCard: {
-    borderRadius: Theme.radius.lg,
-    borderWidth: 0.5,
-    padding: Theme.spacing.md,
-    marginBottom: Theme.spacing.lg,
-  },
-  interestsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  interestChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: Theme.radius.full,
-    borderWidth: 0.5,
-  },
-  interestChipText: { fontSize: Theme.fontSize.sm, fontWeight: Theme.fontWeight.medium },
 
   themeCard: {
     borderRadius: Theme.radius.lg,

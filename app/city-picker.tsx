@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/colors';
 import { CITIES, flag, type City } from '@/constants/cities';
 import { Theme } from '@/constants/theme';
+import { useAuth } from '@/context/auth';
 import { useLocation } from '@/context/location';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +39,7 @@ export default function CityPickerScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { city: selectedCity, setCity } = useLocation();
+  const { updateCity } = useAuth();
 
   const [query, setQuery] = useState('');
   const inputRef = useRef<TextInput>(null);
@@ -62,9 +64,10 @@ export default function CityPickerScreen() {
   const handleSelect = useCallback(
     (city: string) => {
       setCity(city);
+      updateCity(city);
       router.back();
     },
-    [setCity]
+    [setCity, updateCity]
   );
 
   const clearQuery = () => {
@@ -77,7 +80,6 @@ export default function CityPickerScreen() {
       edges={['top', 'bottom']}
       style={[styles.safe, { backgroundColor: colors.background }]}
     >
-      {/* Header */}
       <View
         style={[
           styles.header,
@@ -96,7 +98,6 @@ export default function CityPickerScreen() {
         <View style={styles.backBtn} />
       </View>
 
-      {/* Search bar */}
       <View
         style={[
           styles.searchWrap,
@@ -130,7 +131,6 @@ export default function CityPickerScreen() {
         </View>
       </View>
 
-      {/* Count hint */}
       <View style={[styles.countBar, { backgroundColor: colors.backgroundTertiary }]}>
         <Text style={[styles.countText, { color: colors.textTertiary }]}>
           {totalCount} {totalCount === 1 ? 'city' : 'cities'}
@@ -138,7 +138,6 @@ export default function CityPickerScreen() {
         </Text>
       </View>
 
-      {/* City list */}
       {totalCount === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyEmoji}>🔍</Text>

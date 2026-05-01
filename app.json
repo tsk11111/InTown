@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "demo2",
+    "name": "InTown",
     "slug": "demo2",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,7 +22,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "package": "a.a"
     },
     "web": {
       "output": "static",
@@ -47,7 +48,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

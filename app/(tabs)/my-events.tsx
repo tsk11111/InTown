@@ -1,41 +1,24 @@
 import { Colors } from '@/constants/colors';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { CATEGORY_EMOJI, useEvents, type OrganizerEvent } from '@/context/events';
+import { CATEGORY_EMOJI, DEMO_NOW, isEventPast, useEvents, type OrganizerEvent } from '@/context/events';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-  Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-const MONTH_MAP: Record<string, number> = {
-  ian: 0, feb: 1, mar: 2, apr: 3, mai: 4, iun: 5,
-  iul: 6, aug: 7, sep: 8, oct: 9, noi: 10, dec: 11,
-  jan: 0, may: 4, jun: 5, jul: 6, nov: 10,
-};
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function isPastEvent(date: string): boolean {
-  const lower = date.toLowerCase();
-  let month = -1;
-  for (const [key, val] of Object.entries(MONTH_MAP)) {
-    if (lower.includes(key)) { month = val; break; }
-  }
-  if (month === -1) return false;
-  const dayMatch = date.match(/\d+/);
-  if (!dayMatch) return false;
-  const day = parseInt(dayMatch[0], 10);
-  const now = new Date();
-  const eventDate = new Date(now.getFullYear(), month, day);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return eventDate < today;
+  return isEventPast(date, '11:59 PM');
 }
 
 function SectionLabel({
@@ -120,9 +103,11 @@ function EventRow({
 export default function MyEventsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
   const { user, isOrganizer, joinedEventIds, leaveEvent } = useAuth();
   const { events } = useEvents();
   const [showingPast, setShowingPast] = useState(false);
+  const [leaveTarget, setLeaveTarget] = useState<OrganizerEvent | null>(null);
 
   const createdEvents = useMemo(
     () => (isOrganizer ? events.filter((e) => e.organizerId === user?.id) : []),
@@ -148,22 +133,12 @@ export default function MyEventsScreen() {
     [joinedEvents, showingPast]
   );
 
-  const handleLeave = (event: OrganizerEvent) => {
-    Alert.alert(
-      'Leave event',
-      `Leave "${event.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: () => leaveEvent(event.id) },
-      ]
-    );
-  };
+  const handleLeave = (event: OrganizerEvent) => setLeaveTarget(event);
 
   const hasAnything = displayedCreated.length > 0 || displayedJoined.length > 0;
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: colors.backgroundTertiary }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Calendar</Text>
         <TouchableOpacity
@@ -192,7 +167,6 @@ export default function MyEventsScreen() {
         contentContainerStyle={[styles.list, !hasAnything && styles.listEmpty]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Created events section (organizer only) */}
         {isOrganizer && (
           <>
             <SectionLabel text="YOUR EVENTS" colors={colors} />
@@ -216,7 +190,6 @@ export default function MyEventsScreen() {
           </>
         )}
 
-        {/* Joined events section */}
         <SectionLabel
           text={isOrganizer ? 'EVENTS JOINED' : 'YOUR EVENTS'}
           colors={colors}
@@ -266,6 +239,45 @@ export default function MyEventsScreen() {
 
         <View style={styles.bottomPad} />
       </ScrollView>
+
+      <Modal
+        visible={leaveTarget !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setLeaveTarget(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setLeaveTarget(null)}>
+          <View style={styles.modalOverlay} />
+        </TouchableWithoutFeedback>
+        <View style={[styles.leaveSheet, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16 }]}>
+          <View style={[styles.leaveIconWrap, { backgroundColor: '#FEF2F2' }]}>
+            <Ionicons name="exit-outline" size={26} color="#DC2626" />
+          </View>
+          <Text style={[styles.leaveTitle, { color: colors.text }]}>Leave event?</Text>
+          <Text style={[styles.leaveBody, { color: colors.textSecondary }]}>
+            You'll be removed from{' '}
+            <Text style={{ color: colors.text, fontWeight: '600' }}>{leaveTarget?.title}</Text>
+            {' '}and lose access to the group chat.
+          </Text>
+          <TouchableOpacity
+            style={styles.leaveConfirmBtn}
+            onPress={() => {
+              if (leaveTarget) leaveEvent(leaveTarget.id);
+              setLeaveTarget(null);
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.leaveConfirmText}>Leave event</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.leaveCancelBtn, { borderColor: colors.border }]}
+            onPress={() => setLeaveTarget(null)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.leaveCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -359,4 +371,47 @@ const styles = StyleSheet.create({
   browseBtnText: { color: '#fff', fontSize: Theme.fontSize.sm, fontWeight: '600' },
 
   bottomPad: { height: 32 },
+
+  modalOverlay: { flex: 1 },
+  leaveSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: Theme.spacing.xl,
+    paddingTop: Theme.spacing.xl,
+    alignItems: 'center',
+    gap: Theme.spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 16,
+  },
+  leaveIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaveTitle: { fontSize: Theme.fontSize.xl, fontWeight: '700' },
+  leaveBody: { fontSize: Theme.fontSize.base, textAlign: 'center', lineHeight: 22 },
+  leaveConfirmBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: Theme.radius.lg,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  leaveConfirmText: { color: '#fff', fontSize: Theme.fontSize.base, fontWeight: '600' },
+  leaveCancelBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: Theme.radius.lg,
+    borderWidth: 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaveCancelText: { fontSize: Theme.fontSize.base, fontWeight: '500' },
 });
